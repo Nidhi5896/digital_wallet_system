@@ -36,7 +36,12 @@ const transactionSchema = new mongoose.Schema({
     unique: true
   },
   description: {
-    type: String
+    type: String,
+    default: ''
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

@@ -10,8 +10,8 @@ router.use(admin);
 
 // Admin endpoints
 router.get('/flags', adminController.getAllFlags);
-router.get('/top-users', adminController.getTopUsers);
 router.get('/balances', adminController.getTotalBalance);
 router.get('/transactions/summary', adminController.getTransactionSummary);
+router.get('/users/top', adminController.getTopUsers);
 
 module.exports = router; 

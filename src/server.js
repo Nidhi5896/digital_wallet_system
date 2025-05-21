@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth.routes');
 const walletRoutes = require('./routes/wallet.routes');
+const { scheduleFraudScan } = require('./cronJobs/fraudScan');
 
 const app = express();
 
@@ -25,6 +26,9 @@ app.use('/api/admin', adminRoutes);
 // Error handling middleware
 const errorHandler = require('./middleware/error.middleware');
 app.use(errorHandler);
+
+// Initialize cron jobs
+scheduleFraudScan();
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/digital-wallet', {
