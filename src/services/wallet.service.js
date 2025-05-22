@@ -7,6 +7,8 @@ const FlaggedTransaction = require('../models/flaggedTransaction.model');
 // Fraud detection limits (can be moved to config)
 const MAX_TRANSFERS_PER_MINUTE = 2;
 const LARGE_WITHDRAWAL_THRESHOLD = 10000; // in your currency
+const MAX_FAILED_TRANSACTIONS_PER_PERIOD = 5; // Example threshold
+const FAILED_TRANSACTIONS_PERIOD_MINUTES = 15; // Example time window in minutes
 
 class WalletService {
   // Get or create wallet for user
@@ -42,7 +44,18 @@ class WalletService {
       }
     }
 
-    // Optional: Check for multiple failed transactions (implement later)
+    // Check for multiple failed transactions
+    const failedTransactionsPeriod = new Date(Date.now() - FAILED_TRANSACTIONS_PERIOD_MINUTES * 60 * 1000);
+    const recentFailedTransactions = await Transaction.countDocuments({
+      $or: [{ fromUser: userId }, { toUser: userId }], // Check failed transactions where user is either sender or receiver
+      status: 'failed',
+      createdAt: { $gte: failedTransactionsPeriod },
+      isDeleted: false
+    });
+
+    if (recentFailedTransactions >= MAX_FAILED_TRANSACTIONS_PER_PERIOD) {
+      reason = reason ? `${reason}, Multiple Failed Transactions` : 'Multiple Failed Transactions';
+    }
 
     if (reason) {
       await FlaggedTransaction.create({
