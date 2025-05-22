@@ -3,80 +3,62 @@ const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
 const User = require('../models/user.model');
 const FlaggedTransaction = require('../models/flaggedTransaction.model');
+const currencyService = require('./currency.service');
 
-// Fraud detection limits (can be moved to config)
+// Fraud detection limits
 const MAX_TRANSFERS_PER_MINUTE = 2;
-const LARGE_WITHDRAWAL_THRESHOLD = 10000; // in your currency
-const MAX_FAILED_TRANSACTIONS_PER_PERIOD = 5; // Example threshold
-const FAILED_TRANSACTIONS_PERIOD_MINUTES = 15; // Example time window in minutes
+const MAX_FAILED_TRANSACTIONS_PER_PERIOD = 5;
+const FAILED_TRANSACTIONS_PERIOD_MINUTES = 15;
 
 class WalletService {
-  // Get or create wallet for user
-  async getOrCreateWallet(userId) {
-    let wallet = await Wallet.findOne({ user: userId });
-    if (!wallet) {
-      wallet = await Wallet.create({ user: userId });
-    }
-    return wallet;
+  constructor() {
+    // Initialize currency service
+    this.initializeCurrencyService();
   }
 
-  // Flag suspicious transaction
-  async flagTransaction(transaction, userId) {
-    let reason = null;
+  async initializeCurrencyService() {
+    try {
+      await currencyService.initializeRates();
+    } catch (error) {
+      console.error('Failed to initialize currency service:', error);
+      throw error;
+    }
+  }
 
-    if (transaction.type === 'transfer') {
-      const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
-      const recentTransfers = await Transaction.countDocuments({
-        fromUser: userId,
-        type: 'transfer',
-        createdAt: { $gte: oneMinuteAgo },
-        status: 'completed'
-      });
-
-      if (recentTransfers >= MAX_TRANSFERS_PER_MINUTE) {
-        reason = 'Rapid Transfer';
+  // Get or create wallet for user
+  async getOrCreateWallet(userId) {
+    try {
+      let wallet = await Wallet.findOne({ user: userId });
+      if (!wallet) {
+        wallet = await Wallet.create({ user: userId });
       }
+      return wallet;
+    } catch (error) {
+      console.error('Error in getOrCreateWallet:', error);
+      throw new Error('Failed to get or create wallet');
     }
+  }
 
-    if (transaction.type === 'withdrawal') {
-      if (transaction.amount > LARGE_WITHDRAWAL_THRESHOLD) {
-        reason = 'Sudden Large Withdrawal';
-      }
+  // Validate transaction amount and currency
+  validateTransaction(amount, currency) {
+    if (!amount || amount <= 0) {
+      throw new Error('Amount must be positive');
     }
-
-    // Check for multiple failed transactions
-    const failedTransactionsPeriod = new Date(Date.now() - FAILED_TRANSACTIONS_PERIOD_MINUTES * 60 * 1000);
-    const recentFailedTransactions = await Transaction.countDocuments({
-      $or: [{ fromUser: userId }, { toUser: userId }], // Check failed transactions where user is either sender or receiver
-      status: 'failed',
-      createdAt: { $gte: failedTransactionsPeriod },
-      isDeleted: false
-    });
-
-    if (recentFailedTransactions >= MAX_FAILED_TRANSACTIONS_PER_PERIOD) {
-      reason = reason ? `${reason}, Multiple Failed Transactions` : 'Multiple Failed Transactions';
+    if (!currency || !currencyService.isValidCurrency(currency)) {
+      throw new Error('Invalid currency');
     }
-
-    if (reason) {
-      await FlaggedTransaction.create({
-        userId: userId,
-        transactionId: transaction._id,
-        reason: reason,
-        timestamp: new Date()
-      });
-      return true; // Flagged
-    }
-    return false; // Not flagged
   }
 
   // Deposit money
-  async deposit(userId, amount, description = 'Deposit') {
+  async deposit(userId, amount, currency, description = 'Deposit') {
+    this.validateTransaction(amount, currency);
+    
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
       const wallet = await this.getOrCreateWallet(userId);
-      
+
       // Generate unique reference
       const reference = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
@@ -84,6 +66,7 @@ class WalletService {
       const transaction = await Transaction.create([{
         type: 'deposit',
         amount,
+        currency,
         toUser: userId,
         status: 'pending',
         description,
@@ -91,8 +74,7 @@ class WalletService {
       }], { session });
 
       // Update wallet balance
-      wallet.balance += amount;
-      await wallet.save({ session });
+      await wallet.addAmount(amount, currency);
 
       // Update transaction status
       transaction[0].status = 'completed';
@@ -102,11 +84,13 @@ class WalletService {
       
       return {
         transaction: transaction[0],
-        newBalance: wallet.balance,
-        isFlagged: false // Deposit is not currently checked for fraud
+        newBalance: wallet.getFormattedBalance(currency),
+        allBalances: wallet.getAllBalances(),
+        isFlagged: false
       };
     } catch (error) {
       await session.abortTransaction();
+      console.error('Error in deposit:', error);
       throw error;
     } finally {
       session.endSession();
@@ -114,16 +98,14 @@ class WalletService {
   }
 
   // Withdraw money
-  async withdraw(userId, amount, description = 'Withdrawal') {
+  async withdraw(userId, amount, currency, description = 'Withdrawal') {
+    this.validateTransaction(amount, currency);
+    
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
       const wallet = await this.getOrCreateWallet(userId);
-      
-      if (wallet.balance < amount) {
-        throw new Error('Insufficient balance');
-      }
 
       // Generate unique reference
       const reference = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -132,6 +114,7 @@ class WalletService {
       const transaction = await Transaction.create([{
         type: 'withdrawal',
         amount,
+        currency,
         fromUser: userId,
         status: 'pending',
         description,
@@ -139,8 +122,7 @@ class WalletService {
       }], { session });
 
       // Update wallet balance
-      wallet.balance -= amount;
-      await wallet.save({ session });
+      await wallet.subtractAmount(amount, currency);
 
       // Update transaction status
       transaction[0].status = 'completed';
@@ -153,11 +135,13 @@ class WalletService {
       
       return {
         transaction: transaction[0],
-        newBalance: wallet.balance,
+        newBalance: wallet.getFormattedBalance(currency),
+        allBalances: wallet.getAllBalances(),
         isFlagged
       };
     } catch (error) {
       await session.abortTransaction();
+      console.error('Error in withdraw:', error);
       throw error;
     } finally {
       session.endSession();
@@ -165,7 +149,9 @@ class WalletService {
   }
 
   // Transfer money
-  async transfer(fromUserId, toUserId, amount, description = 'Transfer') {
+  async transfer(fromUserId, toUserId, amount, currency, description = 'Transfer') {
+    this.validateTransaction(amount, currency);
+
     if (fromUserId.toString() === toUserId.toString()) {
       throw new Error('Cannot transfer to self');
     }
@@ -183,10 +169,6 @@ class WalletService {
       const fromWallet = await this.getOrCreateWallet(fromUserId);
       const toWallet = await this.getOrCreateWallet(toUserId);
 
-      if (fromWallet.balance < amount) {
-        throw new Error('Insufficient balance');
-      }
-
       // Generate unique reference
       const reference = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
@@ -194,6 +176,7 @@ class WalletService {
       const transaction = await Transaction.create([{
         type: 'transfer',
         amount,
+        currency,
         fromUser: fromUserId,
         toUser: toUserId,
         status: 'pending',
@@ -202,66 +185,134 @@ class WalletService {
       }], { session });
 
       // Update wallet balances
-      fromWallet.balance -= amount;
-      toWallet.balance += amount;
-
-      await fromWallet.save({ session });
-      await toWallet.save({ session });
+      await fromWallet.subtractAmount(amount, currency);
+      await toWallet.addAmount(amount, currency);
 
       // Update transaction status
       transaction[0].status = 'completed';
       await transaction[0].save({ session });
 
-      // Check for fraud after successful transfer (from user)
+      // Check for fraud after successful transfer
       const isFlagged = await this.flagTransaction(transaction[0], fromUserId);
 
       await session.commitTransaction();
       
       return {
         transaction: transaction[0],
-        newBalance: fromWallet.balance,
+        fromUserNewBalance: fromWallet.getFormattedBalance(currency),
+        toUserNewBalance: toWallet.getFormattedBalance(currency),
+        fromUserAllBalances: fromWallet.getAllBalances(),
+        toUserAllBalances: toWallet.getAllBalances(),
         isFlagged
       };
     } catch (error) {
       await session.abortTransaction();
+      console.error('Error in transfer:', error);
       throw error;
     } finally {
       session.endSession();
     }
   }
 
+  // Get wallet balance
+  async getWalletBalance(userId, currency) {
+    try {
+      const wallet = await this.getOrCreateWallet(userId);
+      return {
+        balance: wallet.getFormattedBalance(currency || wallet.preferredCurrency),
+        preferredCurrency: wallet.preferredCurrency,
+        allBalances: wallet.getAllBalances()
+      };
+    } catch (error) {
+      console.error('Error in getWalletBalance:', error);
+      throw error;
+    }
+  }
+
   // Get transaction history
   async getTransactionHistory(userId, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
+    try {
+      const skip = (page - 1) * limit;
+      
+      const transactions = await Transaction.find({
+        $or: [
+          { fromUser: userId },
+          { toUser: userId }
+        ],
+        isDeleted: false
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('fromUser', 'email firstName lastName')
+      .populate('toUser', 'email firstName lastName');
 
-    const transactions = await Transaction.find({
-      $or: [
-        { fromUser: userId },
-        { toUser: userId }
-      ]
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate('fromUser', 'email firstName lastName')
-    .populate('toUser', 'email firstName lastName');
+      const total = await Transaction.countDocuments({
+        $or: [
+          { fromUser: userId },
+          { toUser: userId }
+        ],
+        isDeleted: false
+      });
 
-    const total = await Transaction.countDocuments({
-      $or: [
-        { fromUser: userId },
-        { toUser: userId }
-      ]
-    });
+      return {
+        transactions,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      };
+    } catch (error) {
+      console.error('Error in getTransactionHistory:', error);
+      throw error;
+    }
+  }
 
-    return {
-      transactions,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit)
+  // Flag suspicious transaction
+  async flagTransaction(transaction, userId) {
+    try {
+      const isFlagged = await this.checkForFraud(transaction, userId);
+      
+      if (isFlagged) {
+        await FlaggedTransaction.create({
+          transaction: transaction._id,
+          user: userId,
+          reason: 'Suspicious activity detected'
+        });
       }
-    };
+      
+      return isFlagged;
+    } catch (error) {
+      console.error('Error in flagTransaction:', error);
+      throw error;
+    }
+  }
+
+  // Check for fraud
+  async checkForFraud(transaction, userId) {
+    try {
+      // Check for rapid transfers
+      const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+      const recentTransfers = await Transaction.countDocuments({
+        fromUser: userId,
+        type: 'transfer',
+        createdAt: { $gte: oneMinuteAgo },
+        status: 'completed',
+        isDeleted: false
+      });
+
+      if (recentTransfers >= MAX_TRANSFERS_PER_MINUTE) {
+        return true;
+      }
+
+      // Add more fraud detection logic here
+      return false;
+    } catch (error) {
+      console.error('Error in checkForFraud:', error);
+      throw error;
+    }
   }
 }
 

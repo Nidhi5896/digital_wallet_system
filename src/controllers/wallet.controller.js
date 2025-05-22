@@ -5,13 +5,21 @@ const walletService = require('../services/wallet.service');
 const validateAmount = [
   body('amount')
     .isFloat({ min: 0.01 })
-    .withMessage('Amount must be a positive number')
+    .withMessage('Amount must be a positive number'),
+  body('currency')
+    .isString()
+    .notEmpty()
+    .withMessage('Currency is required')
 ];
 
 const validateTransfer = [
   body('amount')
     .isFloat({ min: 0.01 })
     .withMessage('Amount must be a positive number'),
+  body('currency')
+    .isString()
+    .notEmpty()
+    .withMessage('Currency is required'),
   body('toUserId')
     .isMongoId()
     .withMessage('Invalid recipient ID')
@@ -28,15 +36,15 @@ const deposit = async (req, res) => {
       });
     }
 
-    const { amount, description } = req.body;
-    const result = await walletService.deposit(req.user._id, amount, description);
+    const { amount, currency, description } = req.body;
+    const result = await walletService.deposit(req.user._id, amount, currency, description);
 
     res.json({
       success: true,
       message: 'Deposit successful',
       data: {
         transaction: result.transaction,
-        newBalance: result.newBalance
+        newBalances: result.newBalances
       }
     });
   } catch (error) {
@@ -59,19 +67,19 @@ const withdraw = async (req, res) => {
       });
     }
 
-    const { amount, description } = req.body;
-    const result = await walletService.withdraw(req.user._id, amount, description);
+    const { amount, currency, description } = req.body;
+    const result = await walletService.withdraw(req.user._id, amount, currency, description);
 
     res.json({
       success: true,
       message: 'Withdrawal successful',
       data: {
         transaction: result.transaction,
-        newBalance: result.newBalance
+        newBalances: result.newBalances
       }
     });
   } catch (error) {
-    if (error.message === 'Insufficient balance') {
+    if (error.message.startsWith('Insufficient balance')) {
       return res.status(400).json({
         success: false,
         message: error.message
@@ -96,19 +104,20 @@ const transfer = async (req, res) => {
       });
     }
 
-    const { amount, toUserId, description } = req.body;
-    const result = await walletService.transfer(req.user._id, toUserId, amount, description);
+    const { amount, currency, toUserId, description } = req.body;
+    const result = await walletService.transfer(req.user._id, toUserId, amount, currency, description);
 
     res.json({
       success: true,
       message: 'Transfer successful',
       data: {
         transaction: result.transaction,
-        newBalance: result.newBalance
+        fromUserNewBalances: result.fromUserNewBalances,
+        toUserNewBalances: result.toUserNewBalances
       }
     });
   } catch (error) {
-    if (error.message === 'Insufficient balance' || 
+    if (error.message.startsWith('Insufficient balance') || 
         error.message === 'Recipient not found' ||
         error.message === 'Cannot transfer to self') {
       return res.status(400).json({
@@ -147,14 +156,14 @@ const getTransactionHistory = async (req, res) => {
   }
 };
 
-// Get wallet balance
+// Get wallet balance(s)
 const getWalletBalance = async (req, res) => {
   try {
-    const wallet = await walletService.getOrCreateWallet(req.user._id);
+    const balances = await walletService.getWalletBalance(req.user._id);
     res.json({
       success: true,
       data: {
-        balance: wallet.balance
+        balances: balances
       }
     });
   } catch (error) {

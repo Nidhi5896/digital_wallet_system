@@ -11,6 +11,9 @@ A secure and robust backend system for a digital wallet application built with N
 - Input Validation
 - Error Handling
 - MongoDB Integration
+- Rate Limiting
+- Fraud Detection
+- Admin Dashboard
 
 ## Prerequisites
 
@@ -44,6 +47,7 @@ A secure and robust backend system for a digital wallet application built with N
 #### Register User
 
 - **POST** `/api/auth/register`
+- **Rate Limit**: 5 requests per hour
 - **Body:**
   ```json
   {
@@ -57,6 +61,7 @@ A secure and robust backend system for a digital wallet application built with N
 #### Login
 
 - **POST** `/api/auth/login`
+- **Rate Limit**: 5 requests per hour
 - **Body:**
   ```json
   {
@@ -78,6 +83,7 @@ A secure and robust backend system for a digital wallet application built with N
 #### Deposit Money
 
 - **POST** `/api/wallet/deposit`
+- **Rate Limit**: 20 requests per hour
 - **Headers:**
   ```
   Authorization: Bearer <jwt_token>
@@ -86,6 +92,7 @@ A secure and robust backend system for a digital wallet application built with N
   ```json
   {
     "amount": 1000.5,
+    "currency": "INR",
     "description": "Initial deposit"
   }
   ```
@@ -93,6 +100,7 @@ A secure and robust backend system for a digital wallet application built with N
 #### Withdraw Money
 
 - **POST** `/api/wallet/withdraw`
+- **Rate Limit**: 20 requests per hour
 - **Headers:**
   ```
   Authorization: Bearer <jwt_token>
@@ -101,6 +109,7 @@ A secure and robust backend system for a digital wallet application built with N
   ```json
   {
     "amount": 500.25,
+    "currency": "INR",
     "description": "ATM withdrawal"
   }
   ```
@@ -108,6 +117,7 @@ A secure and robust backend system for a digital wallet application built with N
 #### Transfer Money
 
 - **POST** `/api/wallet/transfer`
+- **Rate Limit**: 10 requests per hour
 - **Headers:**
   ```
   Authorization: Bearer <jwt_token>
@@ -116,6 +126,7 @@ A secure and robust backend system for a digital wallet application built with N
   ```json
   {
     "amount": 200.75,
+    "currency": "INR",
     "toUserId": "recipient_user_id",
     "description": "Payment for services"
   }
@@ -129,17 +140,67 @@ A secure and robust backend system for a digital wallet application built with N
   Authorization: Bearer <jwt_token>
   ```
 
+### Admin Endpoints
+
+#### Get Flagged Transactions
+
+- **GET** `/api/admin/flagged-transactions`
+- **Rate Limit**: 50 requests per hour
+- **Headers:**
+  ```
+  Authorization: Bearer <jwt_token>
+  ```
+
+#### Get Top Users
+
+- **GET** `/api/admin/top-users?by=balance|volume`
+- **Rate Limit**: 50 requests per hour
+- **Headers:**
+  ```
+  Authorization: Bearer <jwt_token>
+  ```
+
+#### Get Transaction Summary
+
+- **GET** `/api/admin/transactions/summary`
+- **Rate Limit**: 50 requests per hour
+- **Headers:**
+  ```
+  Authorization: Bearer <jwt_token>
+  ```
+
 ## Security Features
+
+### Rate Limiting
+
+- **Authentication Endpoints**: 5 requests per hour
+- **Wallet Operations**: 20 requests per hour
+- **Transfers**: 10 requests per hour
+- **Admin API**: 50 requests per hour
+- **General API**: 100 requests per 15 minutes
+
+### Authentication & Authorization
 
 - Password hashing using bcrypt
 - JWT-based authentication
-- Input validation using express-validator
 - Protected routes using middleware
-- CORS enabled
-- Error handling middleware
-- Atomic transactions for wallet operations
+- Role-based access control (Admin/User)
 
-## Error Handling
+### Input Validation
+
+- Request body validation using express-validator
+- Currency validation
+- Amount validation
+- User input sanitization
+
+### Transaction Security
+
+- Atomic transactions for wallet operations
+- Fraud detection system
+- Suspicious activity monitoring
+- Daily fraud scan job
+
+### Error Handling
 
 The API uses a consistent error response format:
 
@@ -151,7 +212,7 @@ The API uses a consistent error response format:
 }
 ```
 
-## Success Response Format
+### Success Response Format
 
 Successful responses follow this format:
 
@@ -164,3 +225,55 @@ Successful responses follow this format:
   }
 }
 ```
+
+## Rate Limit Headers
+
+The API includes rate limit information in response headers:
+
+- `RateLimit-Limit`: Maximum requests allowed
+- `RateLimit-Remaining`: Remaining requests in current window
+- `RateLimit-Reset`: Time when the rate limit resets
+
+## Currency Support
+
+- Base Currency: INR (Indian Rupee)
+- Supported Currencies:
+  - INR (₹)
+  - USD ($)
+- Automatic currency conversion
+- Fallback exchange rates
+
+## Fraud Detection
+
+- Monitors for suspicious patterns:
+  - Multiple transfers in short period
+  - Large transactions
+  - Unusual activity patterns
+- Daily automated fraud scan
+- Email alerts for suspicious activities
+- Flagged transaction tracking
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev
+
+# Run tests
+npm test
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License.

@@ -11,6 +11,10 @@ const transactionSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  currency: {
+    type: String,
+    required: true // Currency is now required for each transaction
+  },
   fromUser: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
