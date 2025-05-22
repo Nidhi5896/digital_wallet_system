@@ -61,6 +61,13 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Ensure isDeleted: false is default for finds
+userSchema.pre(['find', 'findOne'], function() {
+  if (!Object.prototype.hasOwnProperty.call(this.getQuery(), 'isDeleted')) {
+    this.where({ isDeleted: false });
+  }
+});
+
 const User = mongoose.model('User', userSchema);
 
 module.exports = User; 
