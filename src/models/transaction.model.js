@@ -60,6 +60,13 @@ transactionSchema.pre('save', async function(next) {
   next();
 });
 
+// Ensure isDeleted: false is default for finds
+transactionSchema.pre(['find', 'findOne'], function() {
+  if (!Object.prototype.hasOwnProperty.call(this.getQuery(), 'isDeleted')) {
+    this.where({ isDeleted: false });
+  }
+});
+
 const Transaction = mongoose.model('Transaction', transactionSchema);
 
 module.exports = Transaction; 
