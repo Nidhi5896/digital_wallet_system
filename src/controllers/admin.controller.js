@@ -42,11 +42,14 @@ const getTopUsers = async (req, res) => {
         .populate('user', 'email firstName lastName')
         .lean();
 
-      topUsers = topUsers.map(wallet => ({
-        name: `${wallet.user.firstName} ${wallet.user.lastName}`,
-        email: wallet.user.email,
-        balance: wallet.balance
-      }));
+      // Filter out wallets where user population failed and map the results
+      topUsers = topUsers
+        .filter(wallet => wallet.user)
+        .map(wallet => ({
+          name: `${wallet.user.firstName} ${wallet.user.lastName}`,
+          email: wallet.user.email,
+          balance: wallet.balance
+        }));
     } else if (by === 'volume') {
       topUsers = await Transaction.aggregate([
         { $match: { status: 'completed' } },
@@ -63,11 +66,13 @@ const getTopUsers = async (req, res) => {
           foreignField: '_id',
           as: 'user'
         }},
-        { $unwind: '$user' },
+        // Use $unwind with preserveUnmatched: true to keep documents even if no user is found
+        { $unwind: { path: '$user', preserveUnmatched: true } },
         { $project: {
           _id: 0,
-          name: { $concat: ['$user.firstName', ' ', '$user.lastName'] },
-          email: '$user.email',
+          // Use $ifNull to handle cases where user is null after lookup/unwind
+          name: { $ifNull: [{ $concat: ['$user.firstName', ' ', '$user.lastName'] }, 'Unknown User'] },
+          email: { $ifNull: ['$user.email', 'N/A'] },
           transactionCount: '$count',
           totalAmount: '$totalAmount'
         }}

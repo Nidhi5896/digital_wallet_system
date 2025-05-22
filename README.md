@@ -245,13 +245,48 @@ The API includes rate limit information in response headers:
 
 ## Fraud Detection
 
-- Monitors for suspicious patterns:
-  - Multiple transfers in short period
-  - Large transactions
-  - Unusual activity patterns
+The system implements sophisticated fraud detection rules to protect users and prevent fraudulent activities:
+
+### Transaction Monitoring
+
+- **Amount-based Rules**
+  - Large transaction detection (above ₹10,000)
+  - Suspicious amount patterns (e.g., 9999, 99999)
+  - Daily transfer limits (₹50,000)
+  - Maximum daily transaction count (20)
+
+### Pattern Detection
+
+- **Behavioral Analysis**
+  - Rapid transfers (more than 2 per minute)
+  - Unusual transaction timing patterns
+  - Bot-like behavior detection
+  - High transaction velocity
+  - Multiple recipients in short time
+
+### Account Security
+
+- **Account Age Checks**
+  - New account monitoring (less than 24 hours)
+  - Suspicious activity for new accounts
+  - High-risk country detection
+
+### Automated Monitoring
+
 - Daily automated fraud scan
+- Real-time transaction monitoring
 - Email alerts for suspicious activities
 - Flagged transaction tracking
+- Multiple detection criteria per transaction
+
+### Fraud Prevention Features
+
+- Transaction velocity monitoring
+- Pattern-based detection
+- Amount-based rules
+- Time-based rules
+- Recipient-based rules
+- Account age verification
 
 ## Development
 
@@ -277,3 +312,69 @@ npm test
 ## License
 
 This project is licensed under the MIT License.
+
+## API Documentation
+
+### Postman Collection
+
+The API is documented using Postman. You can find the collection and environment files in the `postman` directory:
+
+- `Digital_Wallet_API.postman_collection.json`: Contains all API endpoints with example requests and responses
+- `Digital_Wallet_Environment.postman_environment.json`: Contains environment variables for different environments
+
+To use the Postman collection:
+
+1. Import both files into Postman
+2. Select the "Digital Wallet Environment" environment
+3. Update the `base_url` variable if needed
+4. Use the collection to test the API endpoints
+
+The collection includes:
+
+#### Authentication
+
+- Register User
+- Login
+- Get Current User Profile
+
+#### Wallet Operations
+
+- Deposit Money
+- Withdraw Money
+- Transfer Money
+- Get Transaction History
+
+#### Admin Operations
+
+- Get Flagged Transactions
+- Get Top Users
+- Get Transaction Summary
+
+Each endpoint includes:
+
+- Request method and URL
+- Required headers
+- Request body schema
+- Example responses
+- Rate limit information
+- Authentication requirements
+
+### API Testing
+
+You can use the Postman collection to:
+
+1. Test all API endpoints
+2. View example requests and responses
+3. Understand authentication flow
+4. Test error scenarios
+5. Verify rate limiting
+6. Test admin operations
+
+### Environment Variables
+
+The Postman environment includes:
+
+- `base_url`: API base URL (default: http://localhost:3000)
+- `jwt_token`: JWT token for authenticated requests
+- `user_id`: Current user's ID
+- `wallet_id`: User's wallet ID
