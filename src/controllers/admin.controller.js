@@ -175,9 +175,43 @@ const getTransactionSummary = async (req, res) => {
   }
 };
 
+// Soft delete user
+const softDeleteUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findByIdAndUpdate(userId, { isDeleted: true, isActive: false }, { new: true });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ success: true, message: 'User soft deleted successfully', data: { userId: user._id } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error soft deleting user', error: error.message });
+  }
+};
+
+// Soft delete transaction
+const softDeleteTransaction = async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const transaction = await Transaction.findByIdAndUpdate(transactionId, { isDeleted: true }, { new: true });
+
+    if (!transaction) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+
+    res.json({ success: true, message: 'Transaction soft deleted successfully', data: { transactionId: transaction._id } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error soft deleting transaction', error: error.message });
+  }
+};
+
 module.exports = {
   getAllFlags,
   getTopUsers,
   getTotalBalance,
-  getTransactionSummary
+  getTransactionSummary,
+  softDeleteUser,
+  softDeleteTransaction
 }; 
