@@ -14,4 +14,8 @@ router.get('/balances', adminController.getTotalBalance);
 router.get('/transactions/summary', adminController.getTransactionSummary);
 router.get('/users/top', adminController.getTopUsers);
 
+// Soft delete endpoints (Admin only)
+router.delete('/users/:userId', adminController.softDeleteUser);
+router.delete('/transactions/:transactionId', adminController.softDeleteTransaction);
+
 module.exports = router; 
